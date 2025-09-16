@@ -1,0 +1,6 @@
+@TelegramBlock_HostAddress = http://localhost:5104
+
+GET {{TelegramBlock_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

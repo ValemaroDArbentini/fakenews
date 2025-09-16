@@ -1,0 +1,13 @@
+{
+  "score": "Score",
+  "combo": "Combo",
+  "pause": "Pause",
+  "continue": "Continue",
+  "exit": "Exit",
+  "autopick": "Auto-pick",
+  "game_over": "Glass is full",
+  "play_again": "Play again",
+  "enough_for_today": "Enough for today",
+  "collision": "Collision",
+  "out_of_bounds": "Out of bounds"
+}

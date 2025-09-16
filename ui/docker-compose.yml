@@ -1,0 +1,11 @@
+# 📄 Назначение: docker-compose для UI; Путь: /ui/docker-compose.yml
+services:
+  ui:
+    build: .
+    image: telegramblock-ui:dev
+    ports:
+      - "8080:80"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8081}
+    # depends_on:
+    #   - api

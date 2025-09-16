@@ -1,0 +1,43 @@
+# ---- root
+.env
+.env.*
+!.env.example
+docker-data/
+*.log
+*.pid
+
+# ---- Windows / macOS
+Thumbs.db
+.DS_Store
+
+# ---- VS / Rider / .NET
+*.user
+*.suo
+*.sln.docstates
+.vs/
+.ReSharper*/
+*_ReSharper*/
+*.DotSettings.user
+api/bin/
+api/obj/
+api/Logs/
+api/Properties/launchSettings.json
+
+# appsettings: оставляем базовый, но прячем локальные/секретные варианты
+api/appsettings.Development.json
+api/appsettings.Local.json
+api/appsettings.*.secrets.json
+
+# ---- Node/Vite UI
+ui/node_modules/
+ui/dist/
+ui/.vite/
+ui/.env
+ui/.env.*
+!ui/.env.example
+ui/npm-debug.log*
+ui/yarn-error.log*
+ui/pnpm-lock.yaml
+
+# Если в UI есть приватные локальные файлы — используйте .private.* и игнорируйте
+ui/src/**/*.private.*

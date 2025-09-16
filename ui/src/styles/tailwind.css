@@ -1,0 +1,13 @@
+/* 📄 Назначение: Глобальные стили Tailwind; Путь: /ui/src/styles/tailwind.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tile-size: 26px; /* адаптивная шкала можно менять через медиа‑правила */
+}
+
+.tile {
+  width: var(--tile-size);
+  height: var(--tile-size);
+}
