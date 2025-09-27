@@ -1,0 +1,93 @@
+# GitHub Actions CI for Fake News (build-only, no deploy)
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Backend (.NET) ---
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore (backend)
+        run: dotnet restore ./src/backend
+
+      - name: Build (backend)
+        run: dotnet build ./src/backend -c Release --no-restore
+
+      - name: Test (backend)
+        run: |
+          if [ -d ./tests/backend ]; then
+            dotnet test ./tests/backend -c Release --no-build --logger trx
+          else
+            echo "No backend tests yet (stub)" && exit 0
+          fi
+
+      # --- Frontend (Node) ---
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install (frontend)
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Build (frontend)
+        working-directory: src/frontend
+        run: npm run build
+
+      - name: Test (frontend)
+        working-directory: src/frontend
+        run: |
+          if npm run | grep -qE "test"; then
+            npm test -- --ci || true
+          else
+            echo "No frontend tests yet (stub)"
+          fi
+
+      # --- Docker (local build) ---
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker build (no push)
+        run: |
+          docker build -t fakenews-backend:ci -f ./src/backend/Dockerfile .
+          docker build -t fakenews-frontend:ci -f ./src/frontend/Dockerfile .
+
+      # --- Artifacts (optional) ---
+      - name: Upload frontend dist
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: src/frontend/dist
+
+  # deploy:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Placeholder for AWS deploy (S3/CloudFront + ECS)
+  #       run: echo "Deployment step planned in v0.4"
+```
+

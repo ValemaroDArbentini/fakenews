@@ -3,7 +3,7 @@ import { Toolbar } from './components/Toolbar'
 import { MovePad } from './components/MovePad'
 import { FigureCapsule } from './components/Grid'
 
-import api from './api'
+import api from './api/api'
 
 // === Типы и константы ===
 type Fig = { id:string, word:string, headCoord:string, blockCoords:string[], isFixed:boolean }

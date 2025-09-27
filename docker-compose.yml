@@ -35,6 +35,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
     ports:
       - "8081:8081"
     healthcheck:

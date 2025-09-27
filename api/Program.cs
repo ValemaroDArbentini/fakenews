@@ -1,5 +1,6 @@
 ﻿using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
+using System.Xml.Linq;
 using TelegramBlock.Controllers;
 using TelegramBlock.DbContext;
 using TelegramBlock.Entities;
@@ -19,35 +20,30 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(o =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwagger(); // до Build()
 
-/*builder.Services.AddSwaggerGen(c =>
+builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { Title = "Digitaline TS API", Version = "v1" });
-
-    // 🔒 Добавляем описание схемы авторизации
-    c.AddSecurityDefinition("Bearer", new()
-    {
-        Description = "Введите JWT токен в формате: Bearer {your token}",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+    c.AddSecurityDefinition("X-Admin-Token", new()
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
+        Description = "Admin token for protected endpoints",
+Name = "X-Admin-Token",
+In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey
     });
-}); */
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+        {
+                {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                        {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+Id = "X-Admin-Token"
+                }
+                            },
+Array.Empty<string>()
+        }
+            });
+    });
 
 
 // загрузка .env

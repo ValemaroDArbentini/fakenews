@@ -84,6 +84,8 @@ cd fakenews
 
 Visit http://\_\_\_\_\_ and play via the browser. The API is also accessible via Swagger at /swagger.
 
+![CI](https://github.com/ValemaroDArbentini/fakenews/actions/workflows/ci.yml/badge.svg)`
+
 
 
 ❤️ About
