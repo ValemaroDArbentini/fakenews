@@ -49,8 +49,15 @@ namespace TelegramBlock.Controllers
         [HttpPost("spawn-layer")]
         public IActionResult SpawnLayer(Guid sessionId)
         {
-            var result = _spawn.TrySpawnLayer(sessionId);
-            if (result == null) return NotFound("Session not found.");
+            SpawnOutcome result;
+                        try
+            {
+                result = _spawn.TrySpawnLayer(sessionId);
+                            }
+                        catch (KeyNotFoundException)
+            {
+                                return NotFound("Session not found.");
+                            }
 
             if (result.GameOver)
             {
@@ -82,12 +89,12 @@ namespace TelegramBlock.Controllers
             _db = db;
         }
 
-        public SpawnOutcome? TrySpawnLayer(Guid sessionId)
+        public SpawnOutcome TrySpawnLayer(Guid sessionId)
         {
             var session = _db.GameSessions
                 .Include(s => s.Figures)
                 .FirstOrDefault(s => s.Id == sessionId);
-            if (session == null) return null;
+            if (session == null) throw new KeyNotFoundException("Session not found.");
 
             // 1) Проверка переполнения: если есть блок на Y=17, новый слой невозможен (если не было сжигания до этого)
             if (session.Figures.SelectMany(f => f.BlockCoords).Any(c => GridMath.Parse(c).y == 17))

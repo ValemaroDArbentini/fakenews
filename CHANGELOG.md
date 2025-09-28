@@ -12,6 +12,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.1.2] – 2025‑09‑28
+### Changed
+- CI workflow refined for stable builds and correct api/ui paths.
+
+### Fixed
+- Minor hardening in FiguresController and LexemesController.
+- Small UI polish in App.tsx and Grid.tsx.
+
+---
+
 ## [0.1.1] – 2025‑09‑27
 ### Added
 - **CI:** `.github/workflows/ci.yml` — build-only pipeline (backend .NET, frontend Node, Docker build, artifact upload).

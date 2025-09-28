@@ -1,8 +1,7 @@
+// 📄 Назначение: Главный экран мини‑аппа с анимацией посадки, сгорания рядов и подсветкой новых слоёв; Путь: /ui/src/App.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Toolbar } from './components/Toolbar'
 import { MovePad } from './components/MovePad'
-import { FigureCapsule } from './components/Grid'
-
 import api from './api/api'
 
 // === Типы и константы ===
@@ -12,15 +11,6 @@ const ROWS = 17
 const letters = ['A','B','C','D','E','F','G','H','I','J','K']
 const GUID_RE = /^[0-9a-fA-F-]{36}$/
 const CELL_PX = 24 // ширина клетки в px — влияет на шаг драг-сдвига
-
-function xFrom(coord: string) {
-  return coord.charCodeAt(0) - 64; // 'A'->1
-}
-
-function letterAt(fig: Fig, coord: string) {
-  const i = xFrom(coord) - xFrom(fig.headCoord); // позиция буквы слева направо
-  return fig.word?.[i] ?? '';                     // защитимся, если длина не совпала
-}
 
 function lenColorClass(len:number){
   switch(len){
@@ -32,28 +22,55 @@ function lenColorClass(len:number){
   }
 }
 
+// Пастельные подложки и рамки по длине слова
+function lenBg(len:number){
+  switch(len){
+    case 1: return 'bg-amber-100'
+    case 2: return 'bg-sky-100'
+    case 3: return 'bg-emerald-100'
+    case 4: return 'bg-violet-100'
+    default: return 'bg-rose-100'
+  }
+}
+function lenBorder(len:number){
+  switch(len){
+    case 1: return 'border border-amber-300'
+    case 2: return 'border border-sky-300'
+    case 3: return 'border border-emerald-300'
+    case 4: return 'border border-violet-300'
+    default: return 'border border-rose-300'
+  }
+}
+
 export function App(){
   // === Состояния ===
   const [sessionId, setSessionId] = useState('')
   const [figures, setFigures] = useState<Fig[]>([])
+  const [selected, setSelected] = useState<string>('')
   const [score, setScore] = useState(0)
   const [combo, setCombo] = useState(1)
-  const [selected, setSelected] = useState<string|undefined>()
   const [ghostPath, setGhostPath] = useState<string[]>([])
+  // анимации
+  const [burnRows, setBurnRows] = useState<number[]>([])
+  const [addedCells, setAddedCells] = useState<Set<string>>(new Set())
+  const [settledCells, setSettledCells] = useState<Set<string>>(new Set())
+  const [showPalette, setShowPalette] = useState(false)
+  // фазовая анимация падения после сгорания
+  const [isFalling, setIsFalling] = useState(false)
+  const [fallDy, setFallDy] = useState<Map<string, number>>(new Map())
+  const figuresBeforeRef = useRef<Fig[]|null>(null)
 
-  // === refs для drag ===
-  const dragStartX = useRef<number|undefined>()
-  const dragAccumSteps = useRef<number>(0)
-  const dragging = useRef<boolean>(false)
-  const previewTimer = useRef<number|undefined>()
+  // drag helpers
+  const dragging = useRef(false)
+  const dragStartX = useRef<number | undefined>(undefined)
+  const dragAccumSteps = useRef(0)
+  const previewTimer = useRef<number>(0)
 
-  // === Получение стартового состояния сессии ===
   useEffect(()=>{ (async()=>{
-    const s = await api.createSession();       // was: api.start()
+    const s = await api.createSession()
     setSessionId(s.sessionId)
-
-    await api.spawnLayer(s.sessionId)          // тот же метод
-    const st:any = await api.getSession(s.sessionId) // was: api.state(...)
+    await api.spawnLayer(s.sessionId)
+    const st:any = await api.getSession(s.sessionId)
     setFigures(st.figures || [])
   })() },[])
 
@@ -72,20 +89,18 @@ export function App(){
     return res
   },[figures])
 
-  // === Утилиты выбора клетки/фигуры под курсором ===
+  // === Утилиты ===
   function getCellFromEvent(target: Element | null): string | null {
     let el: Element | null = target
     while (el && !(el instanceof HTMLElement)) el = el.parentElement
     while (el && !(el as HTMLElement).getAttribute?.('data-coord')) el = el.parentElement
     return (el as HTMLElement | null)?.getAttribute?.('data-coord') ?? null
   }
-  function getFigureIdAtCoord(figs: Fig[], coord: string | null): string | undefined {
-    if (!coord) return undefined
-    const f = figs.find(f => f.blockCoords.includes(coord))
-    return f?.id
+  function getFigureIdAtCoord(list:Fig[], coord:string|null){
+    if(!coord) return ''
+    return list.find(f=>f.blockCoords.includes(coord))?.id || ''
   }
-
-  function pickFirst(){ if(figures[0]) setSelected(figures[0].id) }
+  function pickFirst(){ setSelected(p=> p || figures[0]?.id || '') }
   function isGhost(coord:string){ return ghostPath.includes(coord) }
   const gridRows = Array.from({length:ROWS}, (_,i)=>ROWS-i)
 
@@ -93,16 +108,79 @@ export function App(){
   async function doPreview(dir:'left'|'right', steps:number){
     if(!sessionId || !selected || steps<=0 || !GUID_RE.test(selected)) { setGhostPath([]); return }
     const r:any = await api.move(sessionId, { figureId: selected, direction: dir, steps, preview: true })
-    setGhostPath(r?.path || [])
+    if(Array.isArray(r?.path)) setGhostPath(r.path as string[])
   }
+
   async function commit(dir:'left'|'right', steps:number){
     if(!sessionId || !selected || steps<=0 || !GUID_RE.test(selected)) return
+
+    // снимок «до»
+    const beforeAll = new Set<string>()
+    const beforeRowCount: Record<number, number> = {}
+    for(let y=1;y<=ROWS;y++) beforeRowCount[y] = 0
+    for(const f of figures){
+      for(const c of f.blockCoords){
+        beforeAll.add(c)
+        const y = parseInt(c.slice(1),10)
+        if(y>=1&&y<=ROWS) beforeRowCount[y]++
+      }
+    }
+
     const r:any = await api.move(sessionId, { figureId: selected, direction: dir, steps, preview: false })
-    const st:any = await api.getSession(sessionId) // was: api.state(...)
-    setFigures(st.figures || [])
+    const st:any = await api.getSession(sessionId)
+    const newFigures: Fig[] = st.figures || []
     setGhostPath([])
     setScore(p=>p + (r?.scoreGained||0))
     setCombo(r?.cascades>1 ? r.cascades : 1)
+
+    // подготовим «падение» по ДО‑состоянию
+    const afterRowCount: Record<number, number> = {}
+    for(let y=1;y<=ROWS;y++) afterRowCount[y] = 0
+    for(const f of newFigures){
+      for(const c of f.blockCoords){
+        const y = parseInt(c.slice(1),10)
+        if(y>=1&&y<=ROWS) afterRowCount[y]++
+      }
+    }
+    const burned:number[] = []
+    for(let y=1;y<=ROWS;y++){
+      if (beforeRowCount[y] === COLS && afterRowCount[y] < beforeRowCount[y]) burned.push(y)
+    }
+    setBurnRows(burned)
+
+    const burnedSet = new Set(burned)
+    const dyMap = new Map<string, number>()
+    for(const f of figures){
+      for(const c of f.blockCoords){
+        const y = parseInt(c.slice(1),10)
+        if (burnedSet.has(y)) continue
+        const dy = burned.filter(by => by < y).length
+        if (dy>0) dyMap.set(c, dy)
+      }
+    }
+    figuresBeforeRef.current = figures
+    setFallDy(dyMap)
+    setIsFalling(true)
+
+    // применим новое состояние после анимации падения
+    window.setTimeout(()=>{
+      setFigures(newFigures)
+      setIsFalling(false)
+      setFallDy(new Map())
+      // подсветка действительно добавившихся клеток
+      const afterAll = new Set<string>()
+      for(const f of newFigures){ for(const c of f.blockCoords){ afterAll.add(c) } }
+      const added = new Set<string>()
+      afterAll.forEach(c => { if(!beforeAll.has(c)) added.add(c) })
+      setAddedCells(added)
+      window.setTimeout(()=>setAddedCells(new Set()), 800)
+      const moved = newFigures.find(f => f.id === selected)
+      setSettledCells(new Set(moved?.blockCoords ?? []))
+      window.setTimeout(()=>setSettledCells(new Set()), 400)
+      setBurnRows([])
+    }, 550)
+
+    // duplicate post-phase block removed (handled in falling phase above)
   }
 
   // === Drag handlers (один POST на отпускание) ===
@@ -111,14 +189,11 @@ export function App(){
     const coord = getCellFromEvent(e.target as Element)
     const idUnderPointer = getFigureIdAtCoord(figures, coord)
     if (idUnderPointer) setSelected(idUnderPointer)
-    if (!idUnderPointer && !selected) return // без фигуры drag не стартуем
 
     dragging.current = true
     dragStartX.current = e.clientX
     dragAccumSteps.current = 0
-    window.clearTimeout(previewTimer.current)
   }
-
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) =>{
     if(!dragging.current || dragStartX.current===undefined) return
     if(!selected || !GUID_RE.test(selected)) return
@@ -137,7 +212,6 @@ export function App(){
       setGhostPath([])
     }
   }
-
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) =>{
     if(!dragging.current || dragStartX.current===undefined) return
 
@@ -172,20 +246,45 @@ export function App(){
               <React.Fragment key={y}>
                 {letters.map((L)=>{
                   const coord = `${L}${y}`
-                  const figHere = figures.find(f=>f.blockCoords.includes(coord))
+                  const baseFigures = (isFalling && figuresBeforeRef.current) ? figuresBeforeRef.current : figures
+                  const figHere = baseFigures.find(f=>f.blockCoords.includes(coord))
                   const isSel = figHere?.id === selected
                   const colorClass = figHere ? lenColorClass(figHere.word?.length||1) : ''
                   const ghost = isGhost(coord)
+                  const isBurning = burnRows.includes(y) && !!figHere
+                  const isAdded   = addedCells.has(coord)
+                  const isSettled = settledCells.has(coord)
+                  // вычисляем роль клетки внутри слова для «сплошной плашки»
+                  const colIndex = letters.indexOf(L as any)
+                  const prevCoord = colIndex>0 ? `${letters[colIndex-1]}${y}` : null
+                  const nextCoord = colIndex<COLS-1 ? `${letters[colIndex+1]}${y}` : null
+                  const prevSame = !!(figHere && prevCoord && figHere.blockCoords.includes(prevCoord))
+                  const nextSame = !!(figHere && nextCoord && figHere.blockCoords.includes(nextCoord))
+                  const role = !figHere ? 'none' : (!prevSame && !nextSame ? 'single' : !prevSame ? 'start' : !nextSame ? 'end' : 'middle') as const
                   return (
                     <div key={`${L}-${y}`}
                          data-coord={coord}
                          className={`tile border aspect-square select-none ${figHere?'bg-sky-50 border-sky-200':'bg-white'}`}
                          onPointerDown={(e)=>{ if(figHere) setSelected(figHere.id) }}
                          onClick={()=>{ if(figHere) setSelected(figHere.id) }}>
-                      <div className={`w-full h-full relative ${colorClass}`}>
-                        {figHere ? <span>{letterAt(figHere, coord)}</span> : null}
-                        {ghost ? <span className="absolute inset-0 opacity-30 bg-amber-300"/> : null}
-                        {isSel ? <span className="absolute inset-0 ring-2 ring-amber-400 pointer-events-none"/>: null}
+                      <div className={`w-full h-full relative font-mono text-[13px] font-semibold flex items-center justify-center ${colorClass}`}
+                          style={(()=>{ if(!isFalling) return undefined; const dy = fallDy.get(coord); if(!dy) return undefined; const col = letters.indexOf(L as any); return { transform:`translateY(${dy*CELL_PX}px)`, transition:'transform 420ms cubic-bezier(.22,.61,.36,1)', transitionDelay: `${col*35}ms` } })()}>
+                        {/* Сплошная плашка слова: перекрываем внутренние зазоры */}
+                        {figHere ? (
+                          <span
+                            className={`absolute inset-y-0 ${lenBg(figHere.word?.length||1)} ${lenBorder(figHere.word?.length||1)} ${role==='single'?'rounded-md':role==='start'?'rounded-l-md':role==='end'?'rounded-r-md':''} ${role==='middle'?'border-l-0 border-r-0': role==='start'?'border-r-0': role==='end'?'border-l-0':''}`}
+                            style={{ left: (role==='single'||role==='start')? 0 : -2, right: (role==='single'||role==='end')? 0 : -2 }}
+                          />
+                        ) : null}
+                        {/* Буква поверх плашки */}
+                        {figHere ? <span className="relative z-[1]">{letterAt(figHere, coord)}</span> : null}
+                        {ghost    ? <span className="absolute inset-0 opacity-30 bg-amber-300"/> : null}
+                        {isSel    ? <span className="absolute inset-0 ring-2 ring-amber-400 pointer-events-none"/>: null}
+                        <span className="absolute inset-0 pointer-events-none">
+                          {isFalling && burnRows.includes(parseInt(coord.slice(1),10)) && figHere ? <span className="absolute inset-0 bg-amber-400/60 animate-[fadeout_500ms_ease-in_forwards]" /> : null}
+                          {!isFalling && isAdded   ? <span className="absolute inset-0 bg-emerald-300/40 animate-[fadeout_800ms_ease-out_forwards]" /> : null}
+                          {!isFalling && isSettled ? <span className="absolute inset-0 ring-2 ring-amber-400/80 rounded-sm animate-[fadeout_400ms_ease-out_forwards]" /> : null}
+                        </span>
                       </div>
                     </div>
                   )
@@ -197,15 +296,12 @@ export function App(){
           {/* Правый метр (заполненность строк) */}
           <div className="flex flex-col gap-[2px] ml-2 select-none">
             {gridRows.map(y => (
-              <div key={`m-${y}`} className={`tile w-12 flex items-center justify-end pr-1 text-xs ${rowFill[y]===COLS?'animate-pulse font-semibold text-emerald-600':'text-neutral-500'}`}>{rowFill[y]}/{COLS}</div>
+              <div key={`m-${y}`} className={`tile w-12 flex items-center justify-center text-xs ${rowFill[y]===COLS ? 'animate-pulse font-semibold text-emerald-600':'text-neutral-500'}`}>{rowFill[y]}/{COLS}</div>
             ))}
           </div>
         </div>
 
-        {/* Подписи колонок */}
-        <div className="grid grid-cols-11 gap-[2px] mt-1 select-none text-[11px] text-neutral-500">
-          {letters.map(L => (<div key={`col-${L}`} className="tile w-6 h-6 flex items-center justify-center">{L}</div>))}
-        </div>
+        {/* Палитра фигур/подписи — удалена как лишняя для UX */}
       </div>
 
       <MovePad
@@ -215,6 +311,14 @@ export function App(){
       />
     </div>
   )
+}
+
+// Вычисляем символ слова, соответствующий конкретной клетке фигуры
+function letterAt(fig: Fig, coord: string): string {
+  const i = fig.blockCoords.indexOf(coord)
+  if (i < 0) return '·'
+  const ch = fig.word?.[i]
+  return ch ?? '·'
 }
 
 // Экспорт и по имени, и по умолчанию

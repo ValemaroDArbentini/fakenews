@@ -151,22 +151,32 @@ namespace TelegramBlock.Controllers
                     var arr = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(text);
                     if (arr != null)
                         foreach (var o in arr)
-                            rows.Add((o.GetValueOrDefault("word"), o.GetValueOrDefault("partOfSpeech"), o.GetValueOrDefault("locale")));
+                            rows.Add((
+                                o?.GetValueOrDefault("word"),
+                                o?.GetValueOrDefault("partOfSpeech"),
+                                o?.GetValueOrDefault("locale")
+                            ));
                 }
                 catch { return BadRequest(new { error = "invalid_json_array" }); }
             }
             else if (contentType.Contains("json") || looksJsonObject)
             {
                 // NDJSON
-                foreach (var line in SplitLines(text))
-                {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-                    try
+                                foreach (var line in SplitLines(text))
+                                    {
+                                        if (string.IsNullOrWhiteSpace(line)) continue;
+                                        try
                     {
                         var o = JsonSerializer.Deserialize<Dictionary<string, string>>(line);
-                        rows.Add((o!.GetValueOrDefault("word"), o.GetValueOrDefault("partOfSpeech"), o.GetValueOrDefault("locale")));
-                    }
-                    catch { /* skip */ }
+                                                if (o is null) continue; // безопасный скип пустых/битых строк
+                        
+                        o.TryGetValue("word", out var w);
+                        o.TryGetValue("partOfSpeech", out var p);
+                        o.TryGetValue("locale", out var l);
+                        
+                        rows.Add((w, p, l));
+                                            }
+                                        catch { /* skip */ }
                 }
             }
             else if (contentType.Contains("csv"))

@@ -45,18 +45,19 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: src/frontend/package-lock.json
+     #     cache-dependency-path: src/frontend/package-lock.json
 
       - name: Install (frontend)
-        working-directory: ./ui
-        run: npm ci
+        working-directory: ui
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
       - name: Build (frontend)
-        working-directory: ./ui
+        working-directory: ui
         run: npm run build
 
       - name: Test (frontend)
-        working-directory: src/frontend
+        working-directory: ui
         run: |
           if npm run | grep -qE "test"; then
             npm test -- --ci || true
@@ -75,11 +76,11 @@ jobs:
 
       # --- Artifacts (optional) ---
       - name: Upload frontend dist
-        if: success()
+        if: success() && hashFiles('ui/dist/**') != ''
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: src/frontend/dist
+          path: ui/dist
 
   # deploy:
   #   needs: build

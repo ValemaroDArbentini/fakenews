@@ -1,4 +1,4 @@
-// 📄 Назначение: Игровое поле 11×17 (примитивные ячейки/капсулы); 📍 Путь: /ui/src/components/Grid.tsx
+// 📄 Назначение: Игровое поле 11×17 (вспомогательные компоненты); Путь: /ui/src/components/Grid.tsx
 import React from 'react'
 
 type CellState = 'empty'|'occupied'|'ghost'
@@ -16,7 +16,7 @@ export function Cell({ state, highlight, children }:{ state:CellState, highlight
 export function FigureCapsule({ word, selected }:{ word:string, selected?:boolean }) {
   return (
     <div className={`w-full h-full rounded-xl flex items-center justify-center font-mono text-sm tracking-widest
-      ${selected ? 'animate-pulse ring-2 ring-amber-400' : ''}`}>{word}</div>
+      ${selected ? 'animate-pulse ring-2 ring-amber-400' : ''}`}>{word||'—'}</div>
   )
 }
 
