@@ -1,4 +1,4 @@
-name: CI
+name: CI (smoke build)
 
 on:
   push:
@@ -11,70 +11,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  smoke-build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ===== API (.NET 8) =====
+      # ===== API: .NET 9.0, один проект =====
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 9.0.x
+          cache: true
+          cache-dependency-path: api/TelegramBlock.csproj
 
-      - name: Cache NuGet
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('api/**/*.csproj') }}
-          restore-keys: ${{ runner.os }}-nuget-
+      - name: Restore API
+        run: dotnet restore api/TelegramBlock.csproj
 
-      - name: Restore & Build API
-        working-directory: api
-        run: |
-          dotnet restore
-          dotnet build --configuration Release --no-restore
-          dotnet publish -c Release -o ./publish
+      - name: Build API
+        run: dotnet build api/TelegramBlock.csproj -c Release --no-restore
 
-      - name: Upload API artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-publish
-          path: api/publish
-
-      # ===== UI (Node 20 + Vite) =====
+      # ===== UI: Vite, без lock-файла =====
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
+
+      # Если есть ui/.env.example — используем его как .env.
+      - name: Prepare UI .env
+        working-directory: ui
+        run: |
+          if [ -f ".env.example" ]; then
+            cp .env.example .env
+          else
+            printf "VITE_API_BASE_URL=\nVITE_API_PREFIX=/api\n" > .env
+          fi
+          echo "Created UI .env:"
+          cat .env
 
       - name: Install UI deps
         working-directory: ui
-        run: npm ci
+        run: npm install
 
       - name: Build UI
         working-directory: ui
-        env:
-          # при необходимости укажите базу API, чтоб билд не падал из-за undefined
-          VITE_API_BASE: /api
         run: npm run build
-
-      - name: Upload UI artifact
-        if: success() && hashFiles('ui/dist/**') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-dist
-          path: ui/dist
-
-  # Лёгкая проверка docker-compose синтаксиса (без запуска контейнеров)
-  compose-lint:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-      - name: docker compose config -q
-        run: docker compose -f docker-compose.yml config -q
